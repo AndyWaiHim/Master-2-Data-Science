@@ -1,0 +1,282 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+---
+
+```{r}
+
+library(randomForest)
+library(ggplot2)
+```
+```{r}
+t(resume)
+```
+
+```{r}
+data = read.csv("krkopt.data", sep = ",", header = TRUE)
+n = nrow(data)
+X = matrix(1:18,nrow = 1, ncol = 18)
+for ( i in 1:length(liste)){
+    X[,i] <- nrow(subset(data,draw == liste[i])) / n
+}
+colnames(data) <- c("WK_C","WK_R","WR_C","WR_R","BK_C","BK_R","Depth")
+resume = data.frame(X)
+liste <- c("zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","draw")
+
+# colnames(resume) <- liste
+# WK = paste(data[,1],data[,2], sep="")
+# WR = paste(data[,3],data[,4], sep="")
+# BK = paste(data[,5],data[,6], sep="")
+# 
+# 
+# data2 = data.frame(matrix(c(WK,WR,BK,data[,7]),ncol = 4))
+# colnames(data2) = c("WK","WR","BK","Depth")
+
+
+
+
+```
+#Test d'indépendance
+```{r tests d'indépendances}
+tableau_BK_R = table(data$Depth,data$BK_R)
+tableau_WK_R = table(data$Depth,data$WK_R)
+tableau_WR_R = table(data$Depth,data$WR_R)
+
+tableau_BK_C = table(data$Depth,data$BK_C)
+tableau_WK_C = table(data$Depth,data$WK_C)
+tableau_WR_C = table(data$Depth,data$WR_C)
+set.seed(101)
+chisq <- chisq.test(tableau_BK_R)
+chisq
+chisq$observed
+round(chisq$expected,2)
+
+chisq <- chisq.test(tableau_WK_R)
+chisq
+chisq$observed
+round(chisq$expected,2)
+
+chisq <- chisq.test(tableau_WR_R)
+chisq
+chisq$observed
+round(chisq$expected,2)
+```
+
+
+
+
+
+#représentation des données
+
+```{r données ordonnées ou pas}
+Ordered = TRUE
+```
+
+
+
+
+```{r}
+alpha     <- 0.6 # percentage of training set
+inTrain   <- sample(1:nrow(data), alpha * nrow(data))
+train.set <- data[inTrain,]
+
+train.set$Depth <- factor(train.set$Depth, ordered = Ordered, levels = liste)
+train.set$WK_C <- factor(train.set$WK_C, ordered = Ordered, levels = unique(data$WK_C))
+train.set$WR_C <- factor(train.set$WR_C, ordered = Ordered, levels = unique(data$WR_C))
+train.set$BK_C <- factor(train.set$BK_C, ordered = Ordered, levels = unique(data$BK_C))
+train.set$WK_R <- factor(train.set$WK_R, ordered = Ordered, levels = unique(data$WK_R))
+train.set$WR_R <- factor(train.set$WR_R, ordered = Ordered, levels = unique(data$WR_R))
+train.set$BK_R <- factor(train.set$BK_R, ordered = Ordered, levels = unique(data$BK_R))
+formula <- Depth ~ WK_R + BK_R + WR_R + WK_C + BK_C + WR_C
+
+```
+
+
+```{r}
+test.set  <- data[-inTrain,]
+
+test.set$Depth <- factor(test.set$Depth, ordered = Ordered, levels = liste)
+test.set$WK_C <- factor(test.set$WK_C, ordered = Ordered, levels = unique(data$WK_C))
+test.set$WR_C <- factor(test.set$WR_C, ordered = Ordered, levels = unique(data$WR_C))
+test.set$BK_C <- factor(test.set$BK_C, ordered = Ordered, levels = unique(data$BK_C))
+test.set$WK_R <- factor(test.set$WK_R, ordered = Ordered, levels = unique(data$WK_R))
+test.set$WR_R <- factor(test.set$WR_R, ordered = Ordered, levels = unique(data$WR_R))
+test.set$BK_R <- factor(test.set$BK_R, ordered = Ordered, levels = unique(data$BK_R))
+formula <- Depth ~ WK_R + BK_R + WR_R + WK_C + BK_C + WR_C
+```
+
+
+
+```{r}
+train.set[train.set$Depth == "zero", ]
+
+```
+# RandomForest
+```{r Random forest model}
+fit <- randomForest(formula,data = train.set, importance = TRUE, keep.forest = TRUE)
+varImpPlot(fit)
+```
+
+#Accuracy
+
+```{r accuracy selon la profondeur}
+liste <- c("zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","draw")
+accuracy_depth_ordered = matrix(0,ncol = 1,nrow=18)
+i = 1
+for(depth in liste){
+  test.pred_RF <- data.frame(predict(fit, newdata  = test.set[test.set$Depth==depth,], type = "class"))
+  colnames(test.pred_RF) = "Depth"
+  
+  accuracy_depth_ordered[i] <- sum(as.character(test.set[test.set$Depth==depth,7]) == as.character(test.pred_RF[,1]))/length(test.set[test.set$Depth==depth,7]) 
+  i = i +1
+  
+}
+```
+
+
+
+```{r}
+
+
+accuracy_depth_ordered=data.frame(accuracy_depth_ordered)
+colnames(accuracy_depth_ordered)="Accuracy"
+rownames(accuracy_depth_ordered) = liste
+ggplot(accuracy_depth_ordered, aes(x=rownames(accuracy_depth_ordered), y=Accuracy)) + 
+  geom_bar(stat = "identity")+
+  xlab("Depth")
+```
+
+```{r accuracy  à partir de la matrice de confusion}
+test.pred_RF_ordered <- data.frame(predict(fit, newdata  = test.set[,1:6], type = "class"))
+colnames(test.pred_RF_ordered) = "Depth"
+confMat_ordered <- table(test.set$Depth,factor(test.pred_RF_ordered$Depth))
+accuracy_ordered <- sum(diag(confMat_ordered))/sum(confMat_ordered)
+print(c("Accuracy:",accuracy_ordered))
+print(confMat_ordered)
+```
+
+#Représentation fen
+
+
+```{r encodage des colonne pour plus facilement convertir la table en table fen}
+data2 = data
+liste2 = c("a","b","c","d","e","f","g","h")
+for(i in 1:length(liste2)){
+    print(i)
+    data2[data$WK_C==liste2[i],1] = i
+  }   
+
+#liste2 = unique(data$WR_C)
+for(i in 1:length(liste2)){
+  print(i)
+    data2[data$WR_C==liste2[i],3] = i
+      
+}
+#liste2 = unique(data$BK_C)
+for(i in 1:length(liste2)){
+    print(i)
+
+    data2[data$BK_C==liste2[i],5] = i
+       
+}
+```
+
+
+```{r Conversion pour une ligne de data2}
+fen = ""
+i=9 #ligne de la table data
+for (ligne in 8:1){
+  if(as.numeric(data2$WK_R[i])!=ligne &&  as.numeric(data2$WR_R[i])!=ligne && as.numeric(data2$BK_R[i]!=ligne)) {
+    fen = paste(fen,"8",sep ="")
+  }
+  else{
+    listes_pions = ""
+    listes_pions_arg = 0
+    if (as.numeric(data2$WK_R[i])==ligne){
+      listes_pions = c(listes_pions,"K")
+      listes_pions_arg = c(listes_pions_arg,1)}
+    if (as.numeric(data2$WR_R[i])==ligne){
+      listes_pions = c(listes_pions,"R")
+      listes_pions_arg = c(listes_pions_arg,2)}
+    if (as.numeric(data2$BK_R[i])==ligne){
+      listes_pions = c(listes_pions,"k")
+      listes_pions_arg = c(listes_pions_arg,3)}
+    listes_pions_arg = listes_pions_arg[-1]
+    listes_pions= listes_pions[-1]
+    print(c("ligne:",ligne,listes_pions,listes_pions_arg))
+    nb_pions_sur_ligne = length(listes_pions)
+    donnees = c(data2$WK_C[i],data2$WR_C[i],data2$BK_C[i])[listes_pions_arg]
+
+    arg_sort = sort(donnees,index.return=TRUE)$ix
+    if(nb_pions_sur_ligne!=0)
+      for(j in 1:nb_pions_sur_ligne){
+        if(j ==1){
+          print(c("ici",as.character(as.numeric(donnees[arg_sort[j]])-1)))
+          fen = paste(fen,as.character(as.numeric(donnees[arg_sort[j]])-1),sep="")
+          fen = paste(fen,listes_pions[arg_sort[j]],sep="")
+        }
+        else{
+          fen = paste(fen,as.character(as.numeric(donnees[arg_sort[j]])-as.numeric(donnees[arg_sort[j-1]])-1),sep="")
+          fen = paste(fen,listes_pions[arg_sort[j]],sep="")
+
+        }
+      }
+    fen = paste(fen,as.character(8-as.numeric(donnees[arg_sort[j]])),sep="")
+
+  }
+
+  fen = paste(fen,"/",sep="")
+  print(c("ligne:",ligne,fen))
+}
+fen = substr(fen,1,nchar(fen)-1)
+fen = paste(fen,"w KQkq - 0 1")
+```
+
+
+```{r Prédiction sur cette même ligne i}
+data[i,1:6]
+print(paste("codage fen:",fen))
+plot(Chess$new(fen ))
+prediction = predict(fit,data[i,1:6])
+if (as.character(prediction) == "draw"){
+  print("D'après l'agorithme randomforest aucun joueur ne peut gagner" )
+}
+if(as.character(prediction) != "draw")
+  {
+  print(paste(paste("D'après l'algorithme randomforest le joueur blanc peut gagner en:(",prediction),"coups"))
+  print(paste("Il peut réellement gagner en:",data[i,7]))
+}
+```
+
+
+
+
+
+
+
+
+################################# Non ordonné########################
+
+```{r }
+fit_non_ordered <- randomForest(formula,data = train.set, importance = TRUE, keep.forest = TRUE)
+varImpPlot(fit)
+```
+
+```{r}
+test.pred_RF_non_ordered <- data.frame(predict(fit_non_ordered, newdata  = test.set, type = "class"))
+colnames(test.pred_RF_non_ordered) = "Depth"
+confMat_non_ordered <- table(test.set$Depth,factor(test.pred_RF_non_ordered$Depth))
+accuracy_non_ordered <- sum(diag(confMat_non_ordered))/sum(confMat_non_ordered)
+accuracy_non_ordered
+```
+
+
+
+
+
+
+
+
